@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trending Vacation Spots</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <h1>Discover Trending Vacation Spots</h1>
+    <div class="budget-container">
+        <p>Enter your budget:</p>
+        <input type="number" id="budget" placeholder="Enter your budget" step="100">
+        <button onclick="findVacations()">Find Vacations</button>
+    </div>
+
+    <h2>Results:</h2>
+    <div id="results" class="vacation-container"></div>
+
+    <!-- Chatbox Section -->
+    <div class="chatbox">
+        <div class="chatbox-header">
+            <h3>Vacation AI Chatbot</h3>
+        </div>
+        <div class="chatbox-body" id="chatboxBody">
+            <p class="bot-message">Hi! I’m here to answer your questions about our vacation spots. Ask me anything!</p>
+        </div>
+        <div class="chatbox-footer">
+            <input type="text" id="userMessage" placeholder="Type your question..." />
+            <button onclick="sendMessage()">Send</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        function findVacations() {
+            const budget = document.getElementById('budget').value;
+            fetch(`/api/vacations?budget=${budget}`)
+                .then(response => response.json())
+                .then(data => displayResults(data))
+                .catch(error => console.error('Error:', error));
+        }
+
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+            data.forEach(vacation => {
+                const card = document.createElement('a');
+                card.className = 'vacation-card';
+                card.href = vacation.url;
+                card.target = "_blank";
+                card.innerHTML = `
+                    <img src="${vacation.image}" alt="${vacation.name}" class="vacation-image">
+                    <h3>${vacation.name}</h3>
+                    <p>Cost: $${vacation.cost}</p>
+                    <p>Rating: ${vacation.rating} ⭐</p>
+                `;
+                results.appendChild(card);
+            });
+        }
+
+        socket.on('updateRatings', (updatedSpots) => {
+            const budget = document.getElementById('budget').value;
+            const filteredSpots = updatedSpots
+                .filter(spot => spot.cost <= budget)
+                .sort((a, b) => b.rating - a.rating);
+            displayResults(filteredSpots);
+        });
+
+        async function sendMessage() {
+            const userMessage = document.getElementById("userMessage").value;
+            if (!userMessage) return;
+
+            // Display the user message
+            const chatboxBody = document.getElementById("chatboxBody");
+            const userMessageElement = document.createElement("p");
+            userMessageElement.classList.add("user-message");
+            userMessageElement.innerText = userMessage;
+            chatboxBody.appendChild(userMessageElement);
+            document.getElementById("userMessage").value = ""; // Clear input
+
+            // Send message to server for response
+            try {
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: userMessage })
+                });
+
+                if (!response.ok) throw new Error("Network response was not ok");
+
+                const data = await response.json();
+
+                // Display the bot response
+                const botMessageElement = document.createElement("p");
+                botMessageElement.classList.add("bot-message");
+                botMessageElement.innerText = data.reply;
+                chatboxBody.appendChild(botMessageElement);
+            } catch (error) {
+                console.error("Error sending message:", error);
+                const errorMessageElement = document.createElement("p");
+                errorMessageElement.classList.add("bot-message");
+                errorMessageElement.innerText = "Sorry, I couldn't respond at the moment.";
+                chatboxBody.appendChild(errorMessageElement);
+            }
+
+            // Scroll to the bottom of the chatbox
+            chatboxBody.scrollTop = chatboxBody.scrollHeight;
+        }
+    </script>
+
+</body>
+</html>
